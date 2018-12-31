@@ -1,0 +1,10 @@
+#!/bin/bash
+
+case $1 in
+    generate_model) APP=modelling.py;;
+    api) APP=pda_api/app.py;;
+    *) echo "Usage: $0 (generate_model | api)"; exit 127;;
+esac
+
+. env/bin/activate
+python $APP
