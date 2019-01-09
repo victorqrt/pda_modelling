@@ -83,7 +83,17 @@ x_train, y_train, x_test, y_test = train_data[features_cols], train_data["salary
 
 print("[ ] Training and selecting models by grid search over hyperparameters on different algorithms:")
 
-print("    [ ] Algorithm 1: Ridge regression classifier...")
+print("    [ ] Algorithm 1: Lasso classifier...")
+lassoc = GridSearchCV(estimator=linear_model.Lasso(tol=0.001, max_iter=1000),
+    param_grid={
+        "fit_intercept": [True, False],
+        "selection": ["cyclic", "random"]
+    },
+    cv=3
+)
+lassoc.fit(x_train, y_train)
+
+print("    [ ] Algorithm 2: Ridge regression classifier...")
 rrc = GridSearchCV(estimator=linear_model.RidgeClassifier(),
     param_grid={
         "solver": ["auto", "svd", "cholesky", "lsqr", "sparse_cg", "sag", "saga"],
@@ -93,7 +103,7 @@ rrc = GridSearchCV(estimator=linear_model.RidgeClassifier(),
 )
 rrc.fit(x_train, y_train)
 
-print("    [ ] Algorithm 2: Stochastic Gradient Descent classifier...")
+print("    [ ] Algorithm 3: Stochastic Gradient Descent classifier...")
 sgdc = GridSearchCV(estimator=linear_model.SGDClassifier(tol=0.001, max_iter=1000, n_jobs=-1),
     param_grid={
         "loss": ["hinge", "log", "modified_huber", "perceptron"],
@@ -103,10 +113,19 @@ sgdc = GridSearchCV(estimator=linear_model.SGDClassifier(tol=0.001, max_iter=100
 )
 sgdc.fit(x_train, y_train)
 
+print("    [ ] Algorithm 4: Least Angle Regression classifier...")
+larsc = GridSearchCV(estimator=linear_model.Lars(copy_X=True),
+    param_grid={
+        "fit_intercept": [True, False]
+    },
+    cv=3
+)
+larsc.fit(x_train, y_train)
+
 # We keep the model with the best testing score over all algos
-models = [rrc, sgdc]
+models = [lassoc, rrc, sgdc, larsc]
 model["model"] = list(e for e in models if e.score(x_test, y_test) == max(map(lambda x: x.score(x_test, y_test), models)))[0]
-print("[ ] The selected model is: " + str(model["model"].estimator))
+print("\n[ ] The selected model is: " + str(model["model"].estimator))
 
 print("[ ] Saving the model to model.bin...")
 pickle.dump(model, open("model.bin", "wb"))
