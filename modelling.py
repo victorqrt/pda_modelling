@@ -50,43 +50,40 @@ clean_values = lambda df: df.replace(
             r">50K.?": 1
         }).dropna()
 
-# We need to turn our str values to numeric ones, and then normalize them. Some algos from sklearn will do that for
-# us, but not all of them.
-def scale_values(df):
-    le = preprocessing.LabelEncoder()
-    for c in df.columns:
-        df[c] = le.fit_transform(df[c])
+# We need to turn our str values to numeric ones before normalizing them. Some algos from sklearn will do that for
+# us, but not all of them
+numerize_values = lambda df: pandas.DataFrame({col: df[col].astype('category').cat.codes for col in df}, index=df.index)
 
-    new_df = pandas.DataFrame(preprocessing.StandardScaler().fit_transform(df.astype(float)))
-    new_df.columns = df.columns
-
-    # To get the output class column back to 0 or 1 values
-    new_df["salary_over_fiftyk"] = le.fit_transform(new_df["salary_over_fiftyk"])
-
-    return new_df
-
-prepare_set = lambda df: scale_values(clean_values(clean_columns(df)))
+prepare_set = lambda df: numerize_values(clean_values(clean_columns(df)))
 
 print("[ ] Preparing the data...")
+
 train_data = prepare_set(train_data)
 test_data = prepare_set(test_data)
 
-x_train, y_train, x_test, y_test = train_data[train_data.columns[:-1]], train_data[train_data.columns[-1]], test_data[test_data.columns[:-1]], test_data[test_data.columns[-1]]
+# Normalize the data using a scaler
+tmp_data = train_data.copy()
+features_cols = list(col for col in train_data.columns if col != "salary_over_fiftyk") # We want to keep 0 and 1
+tmp_data = tmp_data[features_cols]
+
+# We fit our scaler on the data, and save it for future use (prediction via our API) along with the trained model
+model = dict()
+model["scaler"] = preprocessing.StandardScaler().fit(tmp_data.values.astype(float))
+
+# Normalize the training set, then the testing set (without refitting the scaler)
+tmp_data = model["scaler"].transform(tmp_data.values.astype(float))
+train_data[features_cols] = tmp_data
+
+tmp_data = test_data.copy()
+tmp_data = tmp_data[features_cols]
+tmp_data = model["scaler"].transform(tmp_data.values.astype(float))
+test_data[features_cols] = tmp_data
+
+x_train, y_train, x_test, y_test = train_data[features_cols], train_data["salary_over_fiftyk"], test_data[features_cols], test_data["salary_over_fiftyk"]
 
 print("[ ] Training and selecting models by grid search over hyperparameters on different algorithms:")
 
-print("    [ ] Algorithm 1: decision tree classifier...")
-dtc = GridSearchCV(estimator=tree.DecisionTreeClassifier(),
-    param_grid={
-        "criterion": ["gini", "entropy"],
-        "splitter": ["best", "random"],
-        "max_features": ["auto", None]
-    },
-    cv=3
-)
-dtc.fit(x_train, y_train)
-
-print("    [ ] Algorithm 2: Ridge regression classifier...")
+print("    [ ] Algorithm 1: Ridge regression classifier...")
 rrc = GridSearchCV(estimator=linear_model.RidgeClassifier(),
     param_grid={
         "solver": ["auto", "svd", "cholesky", "lsqr", "sparse_cg", "sag", "saga"],
@@ -96,7 +93,7 @@ rrc = GridSearchCV(estimator=linear_model.RidgeClassifier(),
 )
 rrc.fit(x_train, y_train)
 
-print("    [ ] Algorithm 3: Stochastic Gradient Descent classifier...")
+print("    [ ] Algorithm 2: Stochastic Gradient Descent classifier...")
 sgdc = GridSearchCV(estimator=linear_model.SGDClassifier(tol=0.001, max_iter=1000, n_jobs=-1),
     param_grid={
         "loss": ["hinge", "log", "modified_huber", "perceptron"],
@@ -107,9 +104,9 @@ sgdc = GridSearchCV(estimator=linear_model.SGDClassifier(tol=0.001, max_iter=100
 sgdc.fit(x_train, y_train)
 
 # We keep the model with the best testing score over all algos
-models = [dtc, rrc, sgdc]
-model = list(e for e in models if e.score(x_test, y_test) == max(map(lambda x: x.score(x_test, y_test), models)))[0]
-print("[ ] The selected model is: " + str(model.estimator))
+models = [rrc, sgdc]
+model["model"] = list(e for e in models if e.score(x_test, y_test) == max(map(lambda x: x.score(x_test, y_test), models)))[0]
+print("[ ] The selected model is: " + str(model["model"].estimator))
 
 print("[ ] Saving the model to model.bin...")
 pickle.dump(model, open("model.bin", "wb"))
