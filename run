@@ -1,10 +1,22 @@
 #!/bin/bash
 
+function get_data {
+    mkdir -p dataset
+
+    echo "[ ] Downloading the data..."
+    curl -sL https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data -o dataset/train.csv
+    curl -sL https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.test -o dataset/test.csv
+
+    sed -i '1d' dataset/test.csv
+    echo "[+] Done."
+}
+
 case $1 in
-    generate_model) APP=modelling.py;;
-    api) APP=pda_api/app.py;;
-    *) echo "Usage: $0 (generate_model | api)"; exit 127;;
+    get-dataset) get_data && exit;;
+    model) APP=app/modelling.py;;
+    plot) mkdir -p plots && APP=app/plot.py;;
+    *) echo "Usage: $0 (get-dataset | model)"; exit 127;;
 esac
 
 . env/bin/activate
-python $APP
+exec python $APP
